@@ -57,7 +57,7 @@ metadata {
             input("CameraPort", "string", title:"Camera Port", description: "80", defaultValue: 80 , required: true, displayDuringSetup: true)
             input("CameraPath", "string", title:"Camera Path to Image", description: "/cgi-bin/video.cgi?msubmenu=jpg&resolution=2", defaultValue: "/cgi-bin/video.cgi?msubmenu=jpg&resolution=2", required: true, displayDuringSetup: true)
             input("CameraPostGet", "string", title:"Does Camera use a Post or Get, normally Get?", description: "GET", defaultValue: "GET", displayDuringSetup: true)
-            input("CameraUser", "string", title:"Camera User", description: "rstonina", defaultValue: "rstonina", required: false, displayDuringSetup: true)
+            input("CameraUser", "string", title:"Camera User", description: "admin", defaultValue: "admin", required: false, displayDuringSetup: true)
             input("CameraPassword", "string", title:"Camera Password", description: "fu69966996", required: false, displayDuringSetup: true)
 	}
     
