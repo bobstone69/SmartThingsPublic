@@ -1,5 +1,4 @@
-/********************************************************************************************
-|    Application Name: Nest Manager and Automations                                         |
+/******************************************************************ger and Automations                                         |
 |    Author: Anthony S. (@tonesto7), Eric S. (@E_sch)                                       |
 |    Contributors: Ben W. (@desertblade)                                                    |
 |    A few code methods are modeled from CoRE by Adrian Caramaliu                           |
