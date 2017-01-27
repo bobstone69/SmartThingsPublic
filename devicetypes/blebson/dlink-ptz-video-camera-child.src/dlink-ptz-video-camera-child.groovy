@@ -1,5 +1,5 @@
 /**
-*  Dlink PTZ Video Camera Child
+*  Dlink PTZ Video Camera Child1
 *
 *  Copyright 2016 Ben Lebson
 *  Parent/Child SmartApp based on Patrick Stuart's Generic Video Camera SmartApp
