@@ -1,33 +1,17 @@
 /**
  *  Nest Presence
- *	Author: Ben W. (@desertBlade)
  *	Author: Anthony S. (@tonesto7)
+ *	Co-Authors: Ben W. (@desertBlade), Eric S. (@E_Sch)
  *
- *
- * Copyright (C) 2016 Ben W, Anthony S.
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this
- * software and associated documentation files (the "Software"), to deal in the Software
- * without restriction, including without limitation the rights to use, copy, modify,
- * merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to the following
- * conditions: The above copyright notice and this permission notice shall be included
- * in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
- * PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
- * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
- * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *	Copyright (C) 2017 Anthony S., Ben W.
+ * 	Licensing Info: Located at https://raw.githubusercontent.com/tonesto7/nest-manager/master/LICENSE.md
  */
-
-// TODO: Need to update Copyright
 
 import java.text.SimpleDateFormat
 
 preferences {  }
 
-def devVer() { return "4.2.0" }
+def devVer() { return "4.5.1" }
 
 // for the UI
 metadata {
@@ -36,11 +20,13 @@ metadata {
 		capability "Presence Sensor"
 		capability "Sensor"
 		capability "Refresh"
-		capability "Health Check"
+		//capability "Health Check"
 
 		command "setPresence"
 		command "refresh"
 		command "log"
+		command "setHome"
+		command "setAway"
 
 		attribute "lastConnection", "string"
 		attribute "apiStatus", "string"
@@ -73,7 +59,7 @@ metadata {
 			state "issue", label: "API Status:\nISSUE ", backgroundColor: "#FFFF33"
 		}
 		standardTile("refresh", "device.refresh", width:2, height:2, decoration: "flat") {
-			state "default", action:"refresh.refresh", icon:"st.secondary.refresh-icon"
+			state "default", action:"refresh.refresh", icon:"https://raw.githubusercontent.com/tonesto7/nest-manager/master/Images/Devices/refresh_icon.png"
 		}
 		valueTile("devTypeVer", "device.devTypeVer",  width: 2, height: 1, decoration: "flat") {
 			state("default", label: 'Device Type:\nv${currentValue}')
@@ -91,25 +77,37 @@ mappings {
 
 void installed() {
 	Logger("installed...")
+	initialize()
+	state?.isInstalled = true
+}
+
+def initialize() {
+	LogAction("initialize")
 	verifyHC()
+}
+
+void updated() {
+	Logger("updated...")
+	initialize()
+}
+
+def getHcTimeout() {
+	def to = state?.hcTimeout
+	return ((to instanceof Integer) ? to.toInteger() : 60)*60
 }
 
 void verifyHC() {
 	def val = device.currentValue("checkInterval")
-	def timeOut = state?.hcTimeout ?: 60
-	if(!val || val.toInteger() != (timeOut.toInteger() * 60)) {
+	def timeOut = getHcTimeout()
+	if(!val || val.toInteger() != timeOut) {
 		Logger("verifyHC: Updating Device Health Check Interval to $timeOut")
-		sendEvent(name: "checkInterval", value: 60 * timeOut.toInteger(), data: [protocol: "cloud"], displayed: false)
+		sendEvent(name: "checkInterval", value: timeOut, data: [protocol: "cloud"], displayed: false)
 	}
 }
 
 def ping() {
 	Logger("ping...")
-	refresh()
-}
-
-def initialize() {
-	LogAction("initialize")
+	keepAwakeEvent()
 }
 
 def parse(String description) {
@@ -138,7 +136,7 @@ def generateEvent(Map eventData) {
 
 def processEvent(data) {
 	if(state?.swVersion != devVer()) {
-		installed()
+		initialize()
 		state.swVersion = devVer()
 	}
 	def eventData = data?.evt
@@ -149,7 +147,7 @@ def processEvent(data) {
 		if(eventData) {
 			state.showLogNamePrefix = eventData?.logPrefix == true ? true : false
 			state.enRemDiagLogging = eventData?.enRemDiagLogging == true ? true : false
-			if(eventData.hcTimeout && state?.hcTimeout != eventData?.hcTimeout) {
+			if(eventData.hcTimeout && (state?.hcTimeout != eventData?.hcTimeout || !state?.hcTimeout)) {
 				state.hcTimeout = eventData?.hcTimeout
 				verifyHC()
 			}
@@ -162,7 +160,7 @@ def processEvent(data) {
 			apiStatusEvent((!eventData?.apiIssues ? false : true))
 			deviceVerEvent(eventData?.latestVer.toString())
 			if(eventData?.allowDbException) { state?.allowDbException = eventData?.allowDbException = false ? false : true }
-			lastUpdatedEvent()
+			lastUpdatedEvent(true)
 		}
 		//This will return all of the devices state data to the logs.
 		//log.debug "Device State Data: ${getState()}"
@@ -236,18 +234,29 @@ def debugOnEvent(debug) {
 	} else { LogAction("debugOn: (${stateVal}) | Original State: (${val})") }
 }
 
-def lastUpdatedEvent() {
+def lastUpdatedEvent(sendEvt=false) {
 	def now = new Date()
-	def formatVal = state?.useMilitaryTime ? "MMM d, yyyy - HH:mm:ss" : "MMM d, yyyy - h:mm:ss a"
+	def formatVal = state.useMilitaryTime ? "MMM d, yyyy - HH:mm:ss" : "MMM d, yyyy - h:mm:ss a"
 	def tf = new SimpleDateFormat(formatVal)
-	tf.setTimeZone(getTimeZone())
+		tf.setTimeZone(getTimeZone())
 	def lastDt = "${tf?.format(now)}"
-	def lastUpd = device.currentState("lastUpdatedDt")?.value
 	state?.lastUpdatedDt = lastDt?.toString()
-	if(!lastUpd.equals(lastDt?.toString())) {
-		Logger("Last Parent Refresh time: (${lastDt}) | Previous Time: (${lastUpd})")
-		sendEvent(name: 'lastUpdatedDt', value: lastDt?.toString(), displayed: false, isStateChange: true)
+	state?.lastUpdatedDtFmt = formatDt(now)
+	if(sendEvt) {
+		LogAction("Last Parent Refresh time: (${lastDt}) | Previous Time: (${lastUpd})")
+		sendEvent(name: 'lastUpdatedDt', value: formatDt(now)?.toString(), displayed: false, isStateChange: true)
 	}
+}
+
+def keepAwakeEvent() {
+	def lastDt = state?.lastUpdatedDtFmt
+	if(lastDt) {
+		def ldtSec = getTimeDiffSeconds(lastDt)
+		log.debug "ldtSec: $ldtSec"
+		if(ldtSec < 1900) {
+			lastUpdatedEvent(true)
+		} else { refresh() }
+	} else { refresh() }
 }
 
 def presenceEvent(presence) {
@@ -384,6 +393,40 @@ def getMetricCntData() {
 	return [presHtmlLoadCnt:(state?.htmlLoadCnt ?: 0)]
 }
 
+def getDtNow() {
+	def now = new Date()
+	return formatDt(now)
+}
+
+def formatDt(dt) {
+	def tf = new SimpleDateFormat("E MMM dd HH:mm:ss z yyyy")
+	if(getTimeZone()) { tf.setTimeZone(getTimeZone()) }
+	else {
+		Logger("SmartThings TimeZone is not found or is not set... Please Try to open your ST location and Press Save...", "warn")
+	}
+	return tf.format(dt)
+}
+
+def getTimeDiffSeconds(strtDate, stpDate=null, methName=null) {
+	//LogTrace("[GetTimeDiffSeconds] StartDate: $strtDate | StopDate: ${stpDate ?: "Not Sent"} | MethodName: ${methName ?: "Not Sent"})")
+	try {
+		if(strtDate) {
+			//if(strtDate?.contains("dtNow")) { return 10000 }
+			def now = new Date()
+			def stopVal = stpDate ? stpDate.toString() : formatDt(now)
+			def startDt = Date.parse("E MMM dd HH:mm:ss z yyyy", strtDate)
+			def stopDt = Date.parse("E MMM dd HH:mm:ss z yyyy", stopVal)
+			def start = Date.parse("E MMM dd HH:mm:ss z yyyy", formatDt(startDt)).getTime()
+			def stop = Date.parse("E MMM dd HH:mm:ss z yyyy", stopVal).getTime()
+			def diff = (int) (long) (stop - start) / 1000
+			//LogTrace("[GetTimeDiffSeconds] Results for '$methName': ($diff seconds)")
+			return diff
+		} else { return null }
+	} catch (ex) {
+		log.warn "getTimeDiffSeconds error: Unable to parse datetime..."
+	}
+}
+
 def getImgBase64(url,type) {
 	def params = [
 		uri: url,
@@ -431,23 +474,12 @@ def getFileBase64(url,preType,fileType) {
 def getCssData() {
 	def cssData = null
 	def htmlInfo = state?.htmlInfo
+	state?.cssData = null
 	if(htmlInfo?.cssUrl && htmlInfo?.cssVer) {
-		if(state?.cssData) {
-			if (state?.cssVer?.toInteger() == htmlInfo?.cssVer?.toInteger()) {
-				//LogAction("getCssData: CSS Data is Current | Loading Data from State...")
-				cssData = state?.cssData
-			} else if (state?.cssVer?.toInteger() < htmlInfo?.cssVer?.toInteger()) {
-				//LogAction("getCssData: CSS Data is Outdated | Loading Data from Source...")
-				cssData = getFileBase64(htmlInfo.cssUrl, "text", "css")
-				state.cssData = cssData
-				state?.cssVer = htmlInfo?.cssVer
-			}
-		} else {
-			//LogAction("getCssData: CSS Data is Missing | Loading Data from Source...")
-			cssData = getFileBase64(htmlInfo.cssUrl, "text", "css")
-			state?.cssData = cssData
-			state?.cssVer = htmlInfo?.cssVer
-		}
+		//LogAction("getCssData: CSS Data is Missing | Loading Data from Source...")
+		cssData = getFileBase64(htmlInfo.cssUrl, "text", "css")
+		state?.cssData = cssData
+		state?.cssVer = htmlInfo?.cssVer
 	} else {
 		//LogAction("getCssData: No Stored CSS Data Found for Device... Loading for Static URL...")
 		cssData = getFileBase64(cssUrl(), "text", "css")
@@ -455,12 +487,12 @@ def getCssData() {
 	return cssData
 }
 
-def cssUrl() { return "https://raw.githubusercontent.com/desertblade/ST-HTMLTile-Framework/master/css/smartthings.css" }
+def cssUrl()	 { return "https://raw.githubusercontent.com/tonesto7/nest-manager/master/Documents/css/ST-HTML.css" }
 
 def getHtml() {
 	try {
-		def updateAvail = !state.updateAvailable ? "" : "<h3>Device Update Available!</h3>"
-		def clientBl = state?.clientBl ? """<h3>Your Manager client has been blacklisted!\nPlease contact the Nest Manager developer to get the issue resolved!!!</h3>""" : ""
+		def updateAvail = !state.updateAvailable ? "" : """<div class="greenAlertBanner">Device Update Available!</div>"""
+		def clientBl = state?.clientBl ? """<div class="brightRedAlertBanner">Your Manager client has been blacklisted!\nPlease contact the Nest Manager developer to get the issue resolved!!!</div>""" : ""
 
 		def mainHtml = """
 		<!DOCTYPE html>

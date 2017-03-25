@@ -1,5 +1,5 @@
 /**
- *  Nest Thermostat
+ *  Nest Thermostat new
  *	Author: Anthony S. (@tonesto7)
  *	Co-Author: Eric S. (@E_Sch)
  *	Contributor: Ben W. (@desertBlade)
